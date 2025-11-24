@@ -3,6 +3,7 @@ using PKHeX.Drawing.PokeSprite;
 using ShinyStashMap.Properties;
 using System.ComponentModel;
 using System.Net.Sockets;
+using System.Reflection;
 using System.Text.RegularExpressions;
 using Point = TransformScale;
 namespace ShinyStashMap;
@@ -15,7 +16,7 @@ public partial class Form1 : Form
     public Dictionary<string, (byte[], float[])> SpawnersLysandre = [];
     public Dictionary<string, (byte[], float[])> SpawnersSewers = [];
     public Dictionary<string, (byte[], float[])> SpawnersSewersB = [];
-
+    public bool Connected = false;
     public List<(PA9, byte[])> ShinyEntities = [];
     public bot Bot = new();
     public Form1(ISaveFileProvider sav)
@@ -41,19 +42,26 @@ public partial class Form1 : Form
     {
         if (ShinyEntities.Count > 0)
             ShinyEntities.Clear();
-        var ShinyBlock = ((SAV9ZA)SAV.SAV).Accessor.GetBlock(0xF3A8569D).Data;
+        var ShinyBlock = ((SAV9ZA)SAV.SAV).Accessor.BlockInfo.First(b => b.Key == 0xF3A8569D);
+        if (ShinyBlock is null || ShinyBlock.Data.IsEmpty)
+            return;
         int i = 0;
-        while (BitConverter.ToString(ShinyBlock[i..(i + 8)].ToArray()).Replace("-","") != "45262284E49CF2CB" && (i + 0x1F0) <= ShinyBlock.Length)
+        while (BitConverter.ToString(ShinyBlock.Data[i..(i + 8)].ToArray()).Replace("-", "") != "45262284E49CF2CB" && (i + 0x1F0) < ShinyBlock.Data.Length)
         {
-            ShinyEntities.Add((new PA9(ShinyBlock[(i + 0x8)..(i + 0x8 + 0x158)].ToArray()), ShinyBlock[i..(i + 8)].ToArray()));
+            ShinyEntities.Add((new PA9(ShinyBlock.Data[(i + 0x8)..(i + 0x8 + 0x158)].ToArray()), ShinyBlock.Data[i..(i + 8)].ToArray()));
             i += 0x1F0;
         }
         SetPBs();
     }
     public void SetPBs()
     {
-        for (int i = 0; i < ShinyEntities.Count; i++)
+        for (int i = 0; i < 10; i++)
         {
+            if (i >= ShinyEntities.Count)
+            {
+                groupBox1.Controls[i].Visible = false;
+                continue;
+            }
             ((PictureBox)groupBox1.Controls[i]).Image = ShinyEntities[i].Item1.Sprite();
             ((PictureBox)groupBox1.Controls[i]).Click += (s, _) => Renderpoint(groupBox1.Controls.IndexOf((Control)s));
             ((PictureBox)groupBox1.Controls[i]).MouseClick += (s, e) =>
@@ -76,26 +84,22 @@ public partial class Form1 : Form
         if (SpawnersLumiose.TryGetValue(hash, out (byte[], float[]) value))
         {
             coords = value.Item1;
-            var pt = Bot.FollowMainPointer([..PlayerPositionPointer]);
-            Bot.WriteBytes(coords, pt);
+            Bot.WriteBytes(coords, [.. PlayerPositionPointer]);
         }
         else if (SpawnersLysandre.TryGetValue(hash, out (byte[], float[]) value2))
         {
             coords = value2.Item1;
-            var pt = Bot.FollowMainPointer([.. PlayerPositionPointer]);
-            Bot.WriteBytes(coords, pt);
+            Bot.WriteBytes(coords, [.. PlayerPositionPointer]);
         }
         else if (SpawnersSewers.TryGetValue(hash, out (byte[], float[]) value3))
         {
             coords = value3.Item1;
-            var pt = Bot.FollowMainPointer([.. PlayerPositionPointer]);
-            Bot.WriteBytes(coords, pt);
+            Bot.WriteBytes(coords, [.. PlayerPositionPointer]);
         }
         else if (SpawnersSewersB.TryGetValue(hash, out (byte[], float[]) value4))
         {
             coords = value4.Item1;
-            var pt = Bot.FollowMainPointer([.. PlayerPositionPointer]);
-            Bot.WriteBytes(coords, pt);
+            Bot.WriteBytes(coords, [.. PlayerPositionPointer]);
         }
     }
     public void Renderpoint(int index)
@@ -217,29 +221,57 @@ public partial class Form1 : Form
     private void button1_Click(object sender, EventArgs e)
     {
         Bot.Connect(textBox1.Text, 6000);
+        Connected = true;
         button1.Enabled = false;
         button1.Text = "Connected";
         ReadShinyStashLive();
     }
     private void ReadShinyStashLive()
     {
-        var ShinyBlock = ((SAV9ZA)SAV.SAV).Accessor.GetBlock(0xF3A8569D);
-        var newblock = Bot.ReadBytes([..ShinyStashPointer], ShinyBlock.Data.Length);
-        ShinyBlock.ChangeData(newblock);
+        var ShinyBlock = ((SAV9ZA)SAV.SAV).Accessor.BlockInfo.FirstOrDefault(b => b.Key == 0xF3A8569D);
+        var newblock = Bot.ReadBytes([.. ShinyStashPointer], 4960);
+        if (ShinyBlock is null)
+        {
+            ShinyBlock = CreateObjectBlock(0xF3A8569D, newblock);
+            AddBlockToFakeSAV((SAV9SV)SAV.SAV, ShinyBlock);
+        }
+        else
+            ShinyBlock.ChangeData(newblock);
         GetShinyBlock();
     }
     public static IReadOnlyList<long> ShinyStashPointer { get; } = [0x5F0C250, 0x120, 0x168, 0x0];
     public static IReadOnlyList<long> PlayerPositionPointer { get; } = [0x41ED340, 0x248, 0x00, 0x138, 0x90];
     protected override void OnClosing(CancelEventArgs e)
     {
-        try
-        {
+        if (Connected)
             Bot.Disconnect();
-        }catch (SocketException)
-        {
-            // ignore
-        }
-        base.OnClosing(e);
+    }
+    private static SCBlock CreateBlock(uint key, SCTypeCode dummy, Memory<byte> data)
+    {
+        Type type = typeof(SCBlock);
+        var instance = type.Assembly.CreateInstance(
+            type.FullName!, false,
+            BindingFlags.Instance | BindingFlags.NonPublic,
+            null, [key, dummy, data], null, null
+        );
+        return (SCBlock)instance!;
+    }
+    public static void AddBlockToFakeSAV(SAV9SV sav, SCBlock block)
+    {
+        var list = new List<SCBlock>();
+        foreach (var b in sav.Accessor.BlockInfo) list.Add(b);
+        list.Add(block);
+        var typeInfo = typeof(SAV9SV).GetField("<AllBlocks>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        typeInfo.SetValue(sav, list);
+        typeInfo = typeof(SaveBlockAccessor9SV).GetField("<BlockInfo>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        typeInfo.SetValue(sav.Blocks, list);
+    }
+
+    public static SCBlock CreateObjectBlock(uint key, Memory<byte> data) => CreateBlock(key, SCTypeCode.Object, data);
+
+    private void button2_Click(object sender, EventArgs e)
+    {
+        ReadShinyStashLive();
     }
 }
 

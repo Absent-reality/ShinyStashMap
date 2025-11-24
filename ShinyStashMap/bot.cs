@@ -8,8 +8,29 @@ namespace ShinyStashMap;
 
 public class bot
 {
-    private static readonly Encoding Encoder = Encoding.UTF8;
-    private static byte[] Encode(string command, bool addrn = true) => Encoder.GetBytes(addrn ? command + "\r\n" : command);
+    private static readonly Encoding Encoder = Encoding.ASCII;
+
+    private static byte[] Encode(string command, bool crlf = true)
+    {
+        if (crlf)
+            command += "\r\n";
+        return Encoder.GetBytes(command);
+    }
+
+    private static string ToHex(byte[] data)
+        => string.Concat(data.Select(z => $"{z:X2}"));
+    private static string Encode(IEnumerable<long> jumps)
+        => string.Concat(jumps.Select(z => $" {z}"));
+    private static string Encode(IReadOnlyDictionary<ulong, int> offsetSizeDictionary)
+        => string.Concat(offsetSizeDictionary.Select(z => $" 0x{z.Key:X16} {z.Value}"));
+
+    private static string ToHex(ReadOnlySpan<byte> data)
+    {
+        var result = new StringBuilder(data.Length * 2);
+        foreach (var b in data)
+            result.Append(b.ToString("X2"));
+        return result.ToString();
+    }
     Socket socket;
     public int MaximumTransferSize = 8192;
     private readonly object _sync = new();
@@ -23,7 +44,7 @@ public class bot
     }
     public void Disconnect()
     {
-        socket.Disconnect(true);
+        socket.Disconnect(false);
     }
     public byte[] ReadBytes(long[] jumps, int length)
     {
@@ -93,28 +114,13 @@ public class bot
             bytes[i / 2] = Convert.ToByte(hex.Substring(i, 2), 16);
         return bytes;
     }
-    public ulong FollowMainPointer(long[] jumps)
-    {
-        lock (_sync)
-        {
-            var cmd = MainPointer(jumps);
-            SendInternal(cmd);
-
-            // give it time to push data back
-            Thread.Sleep(1);
-            var buffer = new byte[17];
-            var _ = ReadInternal(buffer);
-            var bytes = ConvertHexByteStringToBytes(buffer);
-            bytes = [.. bytes.Reverse()];
-            return BitConverter.ToUInt64(bytes, 0);
-        }
-    }
-    public void WriteBytes(byte[] data, ulong offset)
+    
+    public void WriteBytes(byte[] data, long[] jumps)
     {
        
             lock (_sync)
             {
-                SendInternal(Poke((uint)offset, data));
+                SendInternal(PointerPoke(jumps, data));
 
                 // give it time to push data back
                 Thread.Sleep((data.Length / 256));
@@ -122,6 +128,6 @@ public class bot
         
     }
 
-    public static byte[] MainPointer(long[] jumps) => Encode($"pointer{string.Concat(jumps.Select(z => $" {z}"))}");
-    public static byte[] Poke(uint offset, byte[] data) => Encode($"poke 0x{offset:X8} 0x{string.Concat(data.Select(z => $"{z:X2}"))}");
+    public static byte[] PointerPoke(IEnumerable<long> jumps, byte[] data, bool crlf = true)
+         => Encode($"pointerPoke 0x{ToHex(data)}{Encode(jumps)}", crlf);
 }

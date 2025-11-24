@@ -43,6 +43,7 @@
             button1 = new Button();
             textBox1 = new TextBox();
             label1 = new Label();
+            button2 = new Button();
             ((System.ComponentModel.ISupportInitialize)pictureBox1).BeginInit();
             ((System.ComponentModel.ISupportInitialize)pictureBox2).BeginInit();
             ((System.ComponentModel.ISupportInitialize)pictureBox3).BeginInit();
@@ -194,11 +195,22 @@
             label1.TabIndex = 14;
             label1.Text = "IP:";
             // 
+            // button2
+            // 
+            button2.Location = new Point(632, 120);
+            button2.Name = "button2";
+            button2.Size = new Size(134, 50);
+            button2.TabIndex = 15;
+            button2.Text = "Read Block";
+            button2.UseVisualStyleBackColor = true;
+            button2.Click += button2_Click;
+            // 
             // Form1
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(800, 450);
+            Controls.Add(button2);
             Controls.Add(label1);
             Controls.Add(textBox1);
             Controls.Add(button1);
@@ -239,5 +251,6 @@
         private Button button1;
         private TextBox textBox1;
         private Label label1;
+        private Button button2;
     }
 }
