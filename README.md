@@ -1,4 +1,4 @@
-# Shiny Stash Block Map.
+# Shiny Stash Block Map
 
 Shows you the contents of a Save files Shiny Block
 
