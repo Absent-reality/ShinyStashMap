@@ -1,10 +1,12 @@
-Shiny Stash Block Map.
+# Shiny Stash Block Map
 
 Shows you the contents of a Save files Shiny Block
 
 Click on the Pokemon's sprite to have its location shown on the map.
 
-Click connect to read the block Live.
+To use: Add the .dll to your `plugins` folder next to PKHeX
+# OPTIONAL FEATURES:
+Click connect to read the block Live. 
 
 Right click on Pokemon's sprite to teleport to the Pokemon (use at your own risk).
 
